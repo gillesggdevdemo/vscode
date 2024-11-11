@@ -21,7 +21,29 @@ export class ReplaceCommand implements ICommand {
 	}
 
 	public getEditOperations(model: ITextModel, builder: IEditOperationBuilder): void {
-		builder.addTrackedEditOperation(this._range, this._text);
+		let range = this._range;
+		let text = this._text;
+		let lineLength = model.getLineMaxColumn(range.startLineNumber);
+		console.log('getEditOperations');
+		console.log('range : ', range);
+		console.log('text:', text);
+		console.log('range.startColumn : ', range.startColumn);
+		console.log('lineLen:', lineLength);
+		if (range.startColumn > lineLength) {
+			// Need to insert tabs if tabs are used
+			text = ' '.repeat(range.startColumn - lineLength) + text;
+			console.log('text:', text);
+			range = new Range(range.startLineNumber, lineLength, range.endLineNumber, range.endColumn);
+		}
+		if (range.endColumn !== range.startColumn) {
+			console.log('range.endColumn : ', range.endColumn);
+			lineLength = model.getLineMaxColumn(range.endLineNumber);
+			console.log('lineLen:', lineLength);
+			if (range.endColumn > lineLength) {
+				range = new Range(range.startLineNumber, range.startColumn, range.endLineNumber, lineLength);
+			}
+		}
+		builder.addTrackedEditOperation(range, text);
 	}
 
 	public computeCursorState(model: ITextModel, helper: ICursorStateComputerData): Selection {

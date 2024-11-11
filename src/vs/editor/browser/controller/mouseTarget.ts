@@ -241,6 +241,7 @@ export class HitTestContext {
 	public readonly lineHeight: number;
 	public readonly stickyTabStops: boolean;
 	public readonly typicalHalfwidthCharacterWidth: number;
+	public readonly spaceWidth: number;
 	public readonly lastRenderData: PointerHandlerLastRenderData;
 
 	private readonly _context: ViewContext;
@@ -254,6 +255,7 @@ export class HitTestContext {
 		this.lineHeight = options.get(EditorOption.lineHeight);
 		this.stickyTabStops = options.get(EditorOption.stickyTabStops);
 		this.typicalHalfwidthCharacterWidth = options.get(EditorOption.fontInfo).typicalHalfwidthCharacterWidth;
+		this.spaceWidth = options.get(EditorOption.fontInfo).spaceWidth;
 		this.lastRenderData = lastRenderData;
 		this._context = context;
 		this._viewHelper = viewHelper;
@@ -536,7 +538,7 @@ export class MouseTargetFactory {
 		const ctx = new HitTestContext(this._context, this._viewHelper, lastRenderData);
 		const request = new HitTestRequest(ctx, editorPos, pos, relativePos, target);
 		try {
-			const r = MouseTargetFactory._createMouseTarget(ctx, request);
+			const r = MouseTargetFactory._createMouseTarget(ctx, this._context, request);
 
 			if (r.type === MouseTargetType.CONTENT_TEXT) {
 				// Snap to the nearest soft tab boundary if atomic soft tabs are enabled.
@@ -555,7 +557,7 @@ export class MouseTargetFactory {
 		}
 	}
 
-	private static _createMouseTarget(ctx: HitTestContext, request: HitTestRequest): IMouseTarget {
+	private static _createMouseTarget(ctx: HitTestContext, viewContext: ViewContext, request: HitTestRequest): IMouseTarget {
 
 		// console.log(`${domHitTestExecuted ? '=>' : ''}CAME IN REQUEST: ${request}`);
 
@@ -582,7 +584,7 @@ export class MouseTargetFactory {
 		result = result || MouseTargetFactory._hitTestMargin(ctx, resolvedRequest);
 		result = result || MouseTargetFactory._hitTestViewCursor(ctx, resolvedRequest);
 		result = result || MouseTargetFactory._hitTestTextArea(ctx, resolvedRequest);
-		result = result || MouseTargetFactory._hitTestViewLines(ctx, resolvedRequest);
+		result = result || MouseTargetFactory._hitTestViewLines(ctx, viewContext, resolvedRequest);
 		result = result || MouseTargetFactory._hitTestScrollbar(ctx, resolvedRequest);
 
 		return (result || request.fulfillUnknown());
@@ -720,7 +722,8 @@ export class MouseTargetFactory {
 		return null;
 	}
 
-	private static _hitTestViewLines(ctx: HitTestContext, request: ResolvedHitTestRequest): IMouseTarget | null {
+	private static _hitTestViewLines(ctx: HitTestContext, viewContext: ViewContext, request: ResolvedHitTestRequest): IMouseTarget | null {
+		// console.log('_hitTestViewLines');
 		if (!ElementPath.isChildOfViewLines(request.targetPath)) {
 			return null;
 		}
@@ -739,20 +742,37 @@ export class MouseTargetFactory {
 
 		// Check if we are hitting a view-line (can happen in the case of inline decorations on empty lines)
 		// See https://github.com/microsoft/vscode/issues/46942
+		// Without the below piece of code the mouse jumps to the end of the lettered line
 		if (ElementPath.isStrictChildOfViewLines(request.targetPath)) {
 			const lineNumber = ctx.getLineNumberAtVerticalOffset(request.mouseVerticalOffset);
-			if (ctx.viewModel.getLineLength(lineNumber) === 0) {
-				const lineWidth = ctx.getLineWidth(lineNumber);
-				const detail = createEmptyContentDataInLines(request.mouseContentHorizontalOffset - lineWidth);
-				return request.fulfillContentEmpty(new Position(lineNumber, 1), detail);
-			}
-
 			const lineWidth = ctx.getLineWidth(lineNumber);
-			if (request.mouseContentHorizontalOffset >= lineWidth) {
-				// TODO: This is wrong for RTL
-				const detail = createEmptyContentDataInLines(request.mouseContentHorizontalOffset - lineWidth);
-				const pos = new Position(lineNumber, ctx.viewModel.getLineMaxColumn(lineNumber));
-				return request.fulfillContentEmpty(pos, detail);
+			const virtualSpace = viewContext.configuration.options.get(EditorOption.virtualSpace);
+			if (virtualSpace) {
+				// console.log('request.mouseContentHorizontalOffset : ', request.mouseContentHorizontalOffset);
+				// console.log('lineWidth : ', lineWidth);
+				if (ctx.viewModel.getLineLength(lineNumber) === 0 || request.mouseContentHorizontalOffset >= lineWidth) {
+					const pixelsBetweenLineEndAndCursorPosition = request.mouseContentHorizontalOffset - lineWidth;
+					// console.log('pixelsBetweenLineEndAndCursorPosition : ', pixelsBetweenLineEndAndCursorPosition);
+					const detail = createEmptyContentDataInLines(pixelsBetweenLineEndAndCursorPosition);
+					const columnsBetweenLineEndAndCursorPosition = Math.floor(request.mouseContentHorizontalOffset / ctx.spaceWidth);
+					// console.log('columnsBetweenLineEndAndCursorPosition : ', columnsBetweenLineEndAndCursorPosition);
+					const pos = new Position(lineNumber, 1 + columnsBetweenLineEndAndCursorPosition);
+					return request.fulfillContentEmpty(pos, detail);
+				}
+			} else {
+				if (ctx.viewModel.getLineLength(lineNumber) === 0) {
+					const lineWidth = ctx.getLineWidth(lineNumber);
+					const detail = createEmptyContentDataInLines(request.mouseContentHorizontalOffset - lineWidth);
+					return request.fulfillContentEmpty(new Position(lineNumber, 1), detail);
+				}
+
+				const lineWidth = ctx.getLineWidth(lineNumber);
+				if (request.mouseContentHorizontalOffset >= lineWidth) {
+					// TODO: This is wrong for RTL
+					const detail = createEmptyContentDataInLines(request.mouseContentHorizontalOffset - lineWidth);
+					const pos = new Position(lineNumber, ctx.viewModel.getLineMaxColumn(lineNumber));
+					return request.fulfillContentEmpty(pos, detail);
+				}
 			}
 		}
 
@@ -767,7 +787,7 @@ export class MouseTargetFactory {
 		if (request.wouldBenefitFromHitTestTargetSwitch) {
 			// We actually hit something different... Give it one last change by trying again with this new target
 			request.switchToHitTestTarget();
-			return this._createMouseTarget(ctx, request);
+			return this._createMouseTarget(ctx, viewContext, request);
 		}
 
 		// We have tried everything...

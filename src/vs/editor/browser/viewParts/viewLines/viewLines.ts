@@ -145,7 +145,7 @@ export class ViewLines extends ViewPart implements IViewLines {
 		this._linesContent = linesContent;
 		this._textRangeRestingSpot = document.createElement('div');
 		this._visibleLines = new VisibleLinesCollection({
-			createLine: () => new ViewLine(this._viewLineOptions),
+			createLine: () => new ViewLine(this._viewLineOptions, context),
 		});
 		this.domNode = this._visibleLines.domNode;
 

@@ -224,11 +224,26 @@ export class CharacterMapping {
 	}
 
 	public getHorizontalOffset(column: number): number {
-		if (this._horizontalOffset.length === 0) {
+		// console.log('getHorizontalOffset');
+		const lineLength = this._horizontalOffset.length;
+		// console.log('lineLength : ', lineLength);
+		if (lineLength === 0) {
 			// No characters on this line
-			return 0;
+			const extra = column - 1;
+			// console.log('extra : ', extra);
+			return extra;
 		}
-		return this._horizontalOffset[column - 1];
+		if (column > lineLength) {
+			const extra = column - lineLength;
+			// console.log('extra : ', extra);
+			const result = this._horizontalOffset[lineLength - 1] + extra;
+			// console.log('result : ', result);
+			return result;
+		} else {
+			const result = this._horizontalOffset[column - 1];
+			// console.log('result : ', result);
+			return result;
+		}
 	}
 
 	private charOffsetToPartData(charOffset: number): number {
