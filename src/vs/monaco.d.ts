@@ -1743,6 +1743,10 @@ declare namespace monaco.editor {
 		 */
 		glyphMargin?: IModelDecorationGlyphMarginOptions | null;
 		/**
+		 * If set, the decoration will override the line height of the lines it spans. This can only increase the line height, not decrease it.
+		 */
+		lineHeight?: number | undefined;
+		/**
 		 * If set, the decoration will be rendered in the lines decorations with this CSS class name.
 		 */
 		linesDecorationsClassName?: string | null;
@@ -1816,6 +1820,7 @@ declare namespace monaco.editor {
 		 * Defaults to {@link InjectedTextCursorStops.Both}.
 		*/
 		readonly cursorStops?: InjectedTextCursorStops | null;
+		readonly lineHeight?: number;
 	}
 
 	export enum InjectedTextCursorStops {
@@ -2250,6 +2255,7 @@ declare namespace monaco.editor {
 		 * @return An array with the decorations
 		 */
 		getDecorationsInRange(range: IRange, ownerId?: number, filterOutValidation?: boolean, onlyMinimapDecorations?: boolean, onlyMarginDecorations?: boolean): IModelDecoration[];
+		getTextDecorationsInRange(range: IRange, ownerId?: number): IModelDecoration[];
 		/**
 		 * Gets all the decorations as an array.
 		 * @param ownerId If set, it will ignore decorations belonging to other owners.
@@ -2261,6 +2267,11 @@ declare namespace monaco.editor {
 		 * @param ownerId If set, it will ignore decorations belonging to other owners.
 		 */
 		getAllMarginDecorations(ownerId?: number): IModelDecoration[];
+		/**
+		 * Gets all decorations that apply to text.
+		 * @param ownerId If set, it will ignore decorations belonging to other owners.
+		 */
+		getAllTextDecorations(ownerId?: number): IModelDecoration[];
 		/**
 		 * Gets all the decorations that should be rendered in the overview ruler as an array.
 		 * @param ownerId If set, it will ignore decorations belonging to other owners.
@@ -2966,6 +2977,11 @@ declare namespace monaco.editor {
 		readonly insertSpaces: boolean;
 		readonly trimAutoWhitespace: boolean;
 	}
+
+	export function lineMetaFromDecorations(decorations: IModelDecoration[]): {
+		inlineClassNames: any;
+		lineInjectedTexts: any;
+	};
 
 	/**
 	 * Describes the reason the cursor has changed its position.

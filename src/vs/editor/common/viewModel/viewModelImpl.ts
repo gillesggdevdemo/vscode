@@ -116,7 +116,9 @@ export class ViewModel extends Disposable implements IViewModel {
 
 		this._cursor = this._register(new CursorsController(model, this, this.coordinatesConverter, this.cursorConfig));
 
-		this.viewLayout = this._register(new ViewLayout(this._configuration, this.getLineCount(), scheduleAtNextAnimationFrame));
+		this._decorations = new ViewModelDecorations(this._editorId, this.model, this._configuration, this._lines, this.coordinatesConverter);
+
+		this.viewLayout = this._register(new ViewLayout(this._configuration, this.getLineCount(), scheduleAtNextAnimationFrame, this._decorations));
 
 		this._register(this.viewLayout.onDidScroll((e) => {
 			if (e.scrollTopChanged) {
@@ -135,8 +137,6 @@ export class ViewModel extends Disposable implements IViewModel {
 		this._register(this.viewLayout.onDidContentSizeChange((e) => {
 			this._eventDispatcher.emitOutgoingEvent(e);
 		}));
-
-		this._decorations = new ViewModelDecorations(this._editorId, this.model, this._configuration, this._lines, this.coordinatesConverter);
 
 		this._registerModelEvents();
 
@@ -300,7 +300,11 @@ export class ViewModel extends Disposable implements IViewModel {
 								if (injectedText) {
 									injectedText = injectedText.filter(element => (!element.ownerId || element.ownerId === this._editorId));
 								}
-								lineBreaksComputer.addRequest(line, injectedText, null);
+								let inlineClassNames = change.inlineClassNames[lineIdx];
+								if (inlineClassNames) {
+									inlineClassNames = inlineClassNames.filter(element => (!element.ownerId || element.ownerId === this._editorId));
+								}
+								lineBreaksComputer.addRequest(line, injectedText, inlineClassNames, null);
 							}
 							break;
 						}
@@ -309,7 +313,12 @@ export class ViewModel extends Disposable implements IViewModel {
 							if (change.injectedText) {
 								injectedText = change.injectedText.filter(element => (!element.ownerId || element.ownerId === this._editorId));
 							}
-							lineBreaksComputer.addRequest(change.detail, injectedText, null);
+
+							let inlineClassNames: textModelEvents.InlineClassName[] | null = null;
+							if (change.inlineClassNames) {
+								inlineClassNames = change.inlineClassNames.filter(element => (!element.ownerId || element.ownerId === this._editorId));
+							}
+							lineBreaksComputer.addRequest(change.detail, injectedText, inlineClassNames, null);
 							break;
 						}
 					}

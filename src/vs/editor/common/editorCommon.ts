@@ -695,6 +695,7 @@ export interface IContentDecorationRenderOptions {
  */
 export interface IDecorationRenderOptions extends IThemeDecorationRenderOptions {
 	isWholeLine?: boolean;
+	lineHeight?: number | undefined;
 	rangeBehavior?: TrackedRangeStickiness;
 	overviewRulerLane?: OverviewRulerLane;
 
