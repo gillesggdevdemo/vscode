@@ -185,6 +185,26 @@ class SCMRepository implements ISCMRepository {
 
 	readonly input: ISCMInput;
 
+	private _menuFocused = false;
+	private _focusDebouncer: any;
+
+	private readonly _onDidChangeMenuFocus = new Emitter<boolean>();
+	readonly onDidChangeMenuFocus: Event<boolean> = this._onDidChangeMenuFocus.event;
+
+	setMenuFocus(focused: boolean): void {
+		if (this._focusDebouncer) {
+			clearTimeout(this._focusDebouncer);
+		}
+
+		// Debounce focus changes to handle rapid state changes during autofetch
+		this._focusDebouncer = setTimeout(() => {
+			if (this._menuFocused !== focused) {
+				this._menuFocused = focused;
+				this._onDidChangeMenuFocus.fire(focused);
+			}
+		}, 50); // Small delay to handle autofetch interference
+	}
+
 	constructor(
 		public readonly id: string,
 		public readonly provider: ISCMProvider,
@@ -204,6 +224,9 @@ class SCMRepository implements ISCMRepository {
 	}
 
 	dispose(): void {
+		if (this._focusDebouncer) {
+			clearTimeout(this._focusDebouncer);
+		}
 		this.disposable.dispose();
 		this.provider.dispose();
 	}
