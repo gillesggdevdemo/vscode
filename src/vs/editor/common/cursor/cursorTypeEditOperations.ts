@@ -6,7 +6,7 @@
 import { CharCode } from '../../../base/common/charCode.js';
 import { onUnexpectedError } from '../../../base/common/errors.js';
 import * as strings from '../../../base/common/strings.js';
-import { ReplaceCommand, ReplaceCommandWithOffsetCursorState, ReplaceCommandWithoutChangingPosition, ReplaceCommandThatPreservesSelection } from '../commands/replaceCommand.js';
+import { ReplaceCommand, ReplaceCommandWithOffsetCursorState, ReplaceCommandWithoutChangingPosition, ReplaceCommandThatPreservesSelection, ReplaceOvertypeCommand } from '../commands/replaceCommand.js';
 import { ShiftCommand } from '../commands/shiftCommand.js';
 import { SurroundSelectionCommand } from '../commands/surroundSelectionCommand.js';
 import { CursorConfiguration, EditOperationResult, EditOperationType, ICursorSimpleModel, isQuote } from '../cursorCommon.js';
@@ -23,6 +23,7 @@ import { EditorAutoClosingStrategy, EditorAutoIndentStrategy } from '../config/e
 import { createScopedLineTokens } from '../languages/supports.js';
 import { getIndentActionForType, getIndentForEnter, getInheritIndentForLine } from '../languages/autoIndent.js';
 import { getEnterAction } from '../languages/enterAction.js';
+import { InputMode } from '../../../base/common/inputMode.js';
 
 export class AutoIndentOperation {
 
@@ -487,7 +488,9 @@ export class SimpleCharacterTypeOperation {
 		// A simple character type
 		const commands: ICommand[] = [];
 		for (let i = 0, len = selections.length; i < len; i++) {
-			commands[i] = new ReplaceCommand(selections[i], ch);
+			const inputMode = InputMode.getInputMode();
+			const ChosenReplaceCommand = inputMode === 'overtype' ? ReplaceOvertypeCommand : ReplaceCommand;
+			commands[i] = new ChosenReplaceCommand(selections[i], ch);
 		}
 
 		const opType = getTypingOperation(ch, prevEditOperationType);

@@ -238,10 +238,15 @@ export interface IEditorOptions {
 	 */
 	cursorSmoothCaretAnimation?: 'off' | 'explicit' | 'on';
 	/**
-	 * Control the cursor style, either 'block' or 'line'.
+	 * Control the cursor style in insert mode.
 	 * Defaults to 'line'.
 	 */
 	cursorStyle?: 'line' | 'block' | 'underline' | 'line-thin' | 'block-outline' | 'underline-thin';
+	/**
+	 * Control the cursor style in overtype mode.
+	 * Defaults to 'block'.
+	 */
+	overtypeCursorStyle?: 'line' | 'block' | 'underline' | 'line-thin' | 'block-outline' | 'underline-thin';
 	/**
 	 * Control the width of the cursor when cursorStyle is set to 'line'
 	 */
@@ -773,6 +778,11 @@ export interface IEditorOptions {
 	 * Controls whether the accessibility hint should be provided to screen reader users when an inline completion is shown.
 	 */
 	inlineCompletionsAccessibilityVerbose?: boolean;
+
+	/**
+	 * Controls the input mode, whether it is insert or overtype
+	 */
+	inputMode?: 'insert' | 'overtype';
 }
 
 /**
@@ -5353,6 +5363,7 @@ export const enum EditorOption {
 	cursorBlinking,
 	cursorSmoothCaretAnimation,
 	cursorStyle,
+	overtypeCursorStyle,
 	cursorSurroundingLines,
 	cursorSurroundingLinesStyle,
 	cursorWidth,
@@ -5389,6 +5400,7 @@ export const enum EditorOption {
 	hover,
 	inDiffEditor,
 	inlineSuggest,
+	inputMode,
 	letterSpacing,
 	lightbulb,
 	lineDecorationsWidth,
@@ -5694,7 +5706,14 @@ export const EditorOptions = {
 		TextEditorCursorStyle.Line, 'line',
 		['line', 'block', 'underline', 'line-thin', 'block-outline', 'underline-thin'],
 		cursorStyleFromString,
-		{ description: nls.localize('cursorStyle', "Controls the cursor style.") }
+		{ description: nls.localize('cursorStyle', "Controls the cursor style in insert input mode.") }
+	)),
+	overtypeCursorStyle: register(new EditorEnumOption(
+		EditorOption.overtypeCursorStyle, 'overtypeCursorStyle',
+		TextEditorCursorStyle.Block, 'block',
+		['line', 'block', 'underline', 'line-thin', 'block-outline', 'underline-thin'],
+		cursorStyleFromString,
+		{ description: nls.localize('overtypeCursorStyle', "Controls the cursor style in overtype input mode.") }
 	)),
 	cursorSurroundingLines: register(new EditorIntOption(
 		EditorOption.cursorSurroundingLines, 'cursorSurroundingLines',
@@ -5842,6 +5861,18 @@ export const EditorOptions = {
 	hover: register(new EditorHover()),
 	inDiffEditor: register(new EditorBooleanOption(
 		EditorOption.inDiffEditor, 'inDiffEditor', false
+	)),
+	inputMode: register(new EditorStringEnumOption(
+		EditorOption.inputMode, 'inputMode',
+		'insert' as 'insert' | 'overtype',
+		['insert', 'overtype'] as const,
+		{
+			enumDescriptions: [
+				nls.localize('inputMode.insert', "Insert text at cursor position"),
+				nls.localize('inputMode.overtype', "Replace text at cursor position")
+			],
+			description: nls.localize('inputMode', "Controls how text is inputted, whether it is inserted or it overwrites existing content.")
+		}
 	)),
 	letterSpacing: register(new EditorFloatOption(
 		EditorOption.letterSpacing, 'letterSpacing',
