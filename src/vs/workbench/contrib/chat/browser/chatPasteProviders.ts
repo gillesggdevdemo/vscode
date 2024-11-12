@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { CancellationToken } from '../../../../base/common/cancellation.js';
-import { IDataTransferItem, IReadonlyVSDataTransfer } from '../../../../base/common/dataTransfer.js';
+import { createStringDataTransferItem, IDataTransferItem, IReadonlyVSDataTransfer, VSDataTransfer } from '../../../../base/common/dataTransfer.js';
 import { HierarchicalKind } from '../../../../base/common/hierarchicalKind.js';
 import { IRange } from '../../../../editor/common/core/range.js';
 import { DocumentPasteContext, DocumentPasteEditProvider, DocumentPasteEditsSession } from '../../../../editor/common/languages.js';
@@ -17,6 +17,8 @@ import { Codicon } from '../../../../base/common/codicons.js';
 import { localize } from '../../../../nls.js';
 import { IChatRequestVariableEntry } from '../common/chatModel.js';
 import { IExtensionService, isProposedApiEnabled } from '../../../services/extensions/common/extensions.js';
+import { IUndoRedoService, UndoRedoElementType } from '../../../../platform/undoRedo/common/undoRedo.js';
+import { Mimes } from '../../../../base/common/mime.js';
 
 export class PasteImageProvider implements DocumentPasteEditProvider {
 
@@ -25,7 +27,8 @@ export class PasteImageProvider implements DocumentPasteEditProvider {
 	public readonly pasteMimeTypes = ['image/*'];
 	constructor(
 		private readonly chatWidgetService: IChatWidgetService,
-		private readonly extensionService: IExtensionService
+		private readonly extensionService: IExtensionService,
+		private readonly undoRedoService: IUndoRedoService
 	) { }
 
 	async provideDocumentPasteEdits(_model: ITextModel, _ranges: readonly IRange[], dataTransfer: IReadonlyVSDataTransfer, context: DocumentPasteContext, token: CancellationToken): Promise<DocumentPasteEditsSession | undefined> {
@@ -41,6 +44,10 @@ export class PasteImageProvider implements DocumentPasteEditProvider {
 			'image/gif',
 			'image/tiff'
 		];
+
+		const document = _model.getValue();
+		console.log(_ranges);
+		console.log(context);
 
 		let mimeType: string | undefined;
 		let imageItem: IDataTransferItem | undefined;
@@ -89,7 +96,25 @@ export class PasteImageProvider implements DocumentPasteEditProvider {
 
 		widget.attachmentModel.addContext(imageContext);
 
+		this.undoRedoService.pushElement({
+			type: UndoRedoElementType.Resource,
+			resource: _model.uri,
+			label: tempDisplayName,
+			code: 'pasteImage',
+			undo: () => {
+				widget.attachmentModel.delete(imageContext.id);
+			},
+			redo: () => {
+				widget.attachmentModel.addContext(imageContext);
+			}
+		});
+
 		return;
+
+		// return {
+		// 	edits: [{ insertText: 'test text', title: 'test title', kind: new HierarchicalKind(''), handledMimeType: Mimes.text }],
+		// 	dispose() { },
+		// };
 	}
 }
 
@@ -136,13 +161,91 @@ export function isImage(array: Uint8Array): boolean {
 	);
 }
 
+export class PasteTextProvider implements DocumentPasteEditProvider {
+
+	static readonly id = 'text';
+	static readonly kind = new HierarchicalKind('text.plain');
+
+	readonly id = PasteTextProvider.id;
+	readonly kind = PasteTextProvider.kind;
+	readonly dropMimeTypes = [Mimes.text];
+	readonly pasteMimeTypes = [Mimes.text];
+
+	constructor(
+		private readonly chatWidgetService: IChatWidgetService
+	) { }
+
+	async prepareDocumentPaste(model: ITextModel, ranges: readonly IRange[], dataTransfer: IReadonlyVSDataTransfer, token: CancellationToken): Promise<undefined | IReadonlyVSDataTransfer> {
+		const customDataTransfer = new VSDataTransfer();
+		const rangesString = JSON.stringify({ ranges: ranges[0], uri: model.uri.toString() });
+		customDataTransfer.append('editor-additional-data', createStringDataTransferItem(rangesString));
+		return customDataTransfer;
+	}
+
+	async provideDocumentPasteEdits(_model: ITextModel, _ranges: readonly IRange[], dataTransfer: IReadonlyVSDataTransfer, context: DocumentPasteContext, token: CancellationToken): Promise<DocumentPasteEditsSession | undefined> {
+		const text = dataTransfer.get(Mimes.text);
+		const html = dataTransfer.get('text/html');
+		const rawmetadata = dataTransfer.get('vscode-editor-data');
+		const additionalMetaData = dataTransfer.get('editor-additional-data');
+
+		if (!rawmetadata || !text || !html || !additionalMetaData) {
+			return;
+		}
+
+		const textdata = await text.asString();
+		const metadata = JSON.parse(await rawmetadata.asString());
+		const additionalData = JSON.parse(await additionalMetaData.asString());
+		const fileName = additionalData.uri.split('/').pop() || 'unknown file';
+
+		const widget = this.chatWidgetService.getWidgetByInputUri(_model.uri);
+		if (!widget) {
+			return;
+		}
+
+		const copiedContext = await getCopiedContext(textdata, fileName, metadata.mode, additionalData.ranges);
+
+		if (token.isCancellationRequested || !copiedContext) {
+			return;
+		}
+
+		const currentContextIds = widget.attachmentModel.getAttachmentIDs();
+		if (currentContextIds.has(copiedContext.id)) {
+			return;
+		}
+
+		widget.attachmentModel.addContext(copiedContext);
+		return;
+	}
+}
+
+async function getCopiedContext(data: string, fileName: string, language: string, ranges: IRange): Promise<IChatRequestVariableEntry | undefined> {
+	const start = ranges.startLineNumber;
+	const end = ranges.endLineNumber;
+	const resultText = `Copied Selection of Code: \n\n\n From the file: ${fileName} From lines ${start} to ${end} \n \`\`\`${data}\`\`\``;
+	return {
+		value: resultText,
+		id: `${fileName}${start}${end}${ranges.startColumn}${ranges.endColumn}`,
+		name: start === end ? localize('pastedAttachment.oneLine', '1 line') : localize('pastedAttachment.multipleLines', '{0} lines', end + 1 - start),
+		fullName: fileName,
+		isImage: false,
+		icon: Codicon.code,
+		isDynamic: true,
+		isFile: false,
+		code: data,
+		language: language,
+	};
+}
+
 export class ChatPasteProvidersFeature extends Disposable {
 	constructor(
 		@ILanguageFeaturesService languageFeaturesService: ILanguageFeaturesService,
 		@IChatWidgetService chatWidgetService: IChatWidgetService,
-		@IExtensionService extensionService: IExtensionService
+		@IExtensionService extensionService: IExtensionService,
+		@IUndoRedoService undoRedoService: IUndoRedoService
 	) {
 		super();
-		this._register(languageFeaturesService.documentPasteEditProvider.register({ scheme: ChatInputPart.INPUT_SCHEME, pattern: '*', hasAccessToAllModels: true }, new PasteImageProvider(chatWidgetService, extensionService)));
+		this._register(languageFeaturesService.documentPasteEditProvider.register({ scheme: ChatInputPart.INPUT_SCHEME, pattern: '*', hasAccessToAllModels: true }, new PasteImageProvider(chatWidgetService, extensionService, undoRedoService)));
+		this._register(languageFeaturesService.documentPasteEditProvider.register({ scheme: ChatInputPart.INPUT_SCHEME, pattern: '*', hasAccessToAllModels: true }, new PasteTextProvider(chatWidgetService)));
+		this._register(languageFeaturesService.documentPasteEditProvider.register('*', new PasteTextProvider(chatWidgetService)));
 	}
 }
